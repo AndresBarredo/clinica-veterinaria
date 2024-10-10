@@ -1,0 +1,39 @@
+name: CI Python Test
+
+# Ejecutar este flujo de trabajo en eventos específicos
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+# Definir los trabajos (jobs) que se ejecutarán
+jobs:
+  test:
+    # Definir el entorno en el que se ejecutará este trabajo
+    runs-on: ubuntu-latest
+
+    # Configurar los pasos del flujo de trabajo
+    steps:
+      # Usar una acción de GitHub para verificar el código
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      # Configurar Python en la máquina de ejecución
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.8'
+
+      # Instalar las dependencias
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # Ejecutar los tests
+      - name: Run tests
+        run: |
+          pytest
