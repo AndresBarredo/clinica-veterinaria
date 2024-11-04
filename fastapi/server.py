@@ -1,5 +1,6 @@
 import shutil
 
+import json
 import io
 from fastapi.responses import JSONResponse
 from fastapi import FastAPI, File, UploadFile,Form
@@ -76,9 +77,26 @@ class FormDataMascota(BaseModel):
     class Config:
         orm_mode = True
 
+file_path = "sqlalchemy/duenos.txt"
+
 @app.post("/envio/")
 async def submit_form(data: FormDataDuenos):
-    return {"message": "Formulario recibido", "data": data}
+    # Cargar dueños existentes
+    try:
+        with open(file_path, "r") as file:
+            duenos = json.load(file)
+    except FileNotFoundError:
+        duenos = []  # Si no existe, inicializa una lista vacía
+
+    # Añadir el nuevo dueño al listado
+    duenos.append(data.dict())  # Convertir el modelo a diccionario y añadirlo a la lista
+
+    # Guardar la lista actualizada en el archivo
+    with open(file_path, "w") as file:
+        json.dump(duenos, file, indent=4)  # Guarda con formato JSON legible
+        print("Datos guardados en duenos.txt")  # Mensaje de confirmación
+
+    return {"message": "Formulario recibido y guardado", "data": data}
 
 # Lista temporal de dueños registrados
 # Ejemplo: [{'Nombre': 'Carlos', 'Telefono': '123456789', 'email': 'carlos@example.com'}]
