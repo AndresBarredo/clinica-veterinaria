@@ -54,12 +54,50 @@ def retrieve_data ():
     listado.contratos = todosmisdatosdict
     return listado
 
-class FormData(BaseModel):
-    date: str
-    description: str
-    option: str
-    amount: float
+current_id = 0  # Variable global para el ID de mascotas
+
+def get_new_id():
+    global current_id
+    current_id += 1
+    return current_id
+
+class FormDataDuenos(BaseModel):
+    Nombre: str
+    Telefono: str
+    email: str
+    
+class FormDataMascota(BaseModel):
+    ID: int  # Este será un valor auto-incremental que gestionaremos.
+    Nombre: str
+    Edad: int
+    Tipo: int  # 0 para perro, 1 para gato
+    Dueño: str  # Nombre del dueño ya registrado
+
+    class Config:
+        orm_mode = True
 
 @app.post("/envio/")
-async def submit_form(data: FormData):
+async def submit_form(data: FormDataDuenos):
     return {"message": "Formulario recibido", "data": data}
+
+# Lista temporal de dueños registrados
+# Ejemplo: [{'Nombre': 'Carlos', 'Telefono': '123456789', 'email': 'carlos@example.com'}]
+dueños_registrados = [{"Nombre": "Carlos", "Telefono": "123456789", "email": "carlos@example.com"}]
+
+@app.post("/registro_mascota/")
+async def registro_mascota(nombre: str, edad: int, tipo: int, dueño: str):
+    # Validar que el dueño esté registrado
+    if not any(d['Nombre'] == dueño for d in dueños_registrados):
+        return JSONResponse(status_code=400, content={"error": "El dueño no está registrado."})
+
+    # Crear una nueva mascota con un ID auto-incremental
+    mascota = FormDataMascota(
+        ID=get_new_id(),
+        Nombre=nombre,
+        Edad=edad,
+        Tipo=tipo,
+        Dueño=dueño
+    )
+    # Aquí podrías añadir la mascota a una base de datos o lista de almacenamiento
+
+    return {"message": "Mascota registrada con éxito", "mascota": mascota}
