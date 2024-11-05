@@ -8,6 +8,7 @@ st.title("Registrar Mascota 🐾")
 
 # Crear el formulario para registrar la mascota
 with st.form("registro_mascota"):
+    nombre_dueño = st.text_input("Nombre del Dueño")
     nombre_mascota = st.text_input("Nombre de la Mascota")
     tipo = st.selectbox("Tipo de Mascota", ["Perro", "Gato"])
     raza = st.text_input("Raza")
@@ -18,6 +19,7 @@ with st.form("registro_mascota"):
 
     # Crear el payload para enviar al microservicio
     payload = {
+        "nombre_dueño": nombre_dueño,
         "nombre_mascota": nombre_mascota,
         "tipo": tipo,
         "raza": raza,
@@ -35,3 +37,4 @@ with st.form("registro_mascota"):
             st.json(response.json())
         else:
             st.error("Error al enviar los datos")
+
