@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
 
-# URL del microservicio FastAPI
+# URL del microservicio FastAPI     ab
 url_mascota = "http://fastapi:8000/registro_mascota/"
 
 st.title("Registro de Mascotas en la Clínica Veterinaria")
