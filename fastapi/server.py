@@ -1,8 +1,9 @@
 import shutil
 
+import json
 import io
 from fastapi.responses import JSONResponse
-from fastapi import FastAPI, File, UploadFile,Form
+from fastapi import FastAPI, File, UploadFile,Form, HTTPException
 import pandas as pd
 from typing import  List
 
@@ -76,9 +77,29 @@ class FormDataMascota(BaseModel):
     class Config:
         orm_mode = True
 
+file_path = "\\wsl.localhost\Ubuntu\home\andres\repositorios\clinica-veterinaria\sqlalchemy\duenos"
+
 @app.post("/envio/")
 async def submit_form(data: FormDataDuenos):
-    return {"message": "Formulario recibido", "data": data}
+    # Validar que el dueño no esté ya registrado
+    if any(d['Nombre'] == data.Nombre for d in dueños_registrados):
+        raise HTTPException(status_code=400, detail="El dueño ya está registrado.")
+
+    # Cargar dueños existentes desde el archivo
+    try:
+        with open(file_path, "r") as file:
+            dueños_registrados = json.load(file)
+    except FileNotFoundError:
+        dueños_registrados = []  # Si no existe, inicializa una lista vacía
+
+    # Añadir el nuevo dueño al listado
+    dueños_registrados.append(data.dict())  # Convertir el modelo a diccionario y añadirlo a la lista
+
+    # Guardar la lista actualizada en el archivo
+    with open(file_path, "w") as file:
+        json.dump(dueños_registrados, file, indent=4)  # Guarda con formato JSON legible
+
+    return {"message": "Formulario recibido y guardado", "data": data}
 
 # Lista temporal de dueños registrados
 # Ejemplo: [{'Nombre': 'Carlos', 'Telefono': '123456789', 'email': 'carlos@example.com'}]
