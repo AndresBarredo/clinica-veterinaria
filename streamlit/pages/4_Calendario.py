@@ -183,5 +183,3 @@ if st.session_state.get("fecha") is not None:
    #     st.markdown("Hello World 👋")
    #     name = st.text_input("What's your name?")
 
-
-
