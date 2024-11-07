@@ -28,13 +28,12 @@ with st.form("registro_mascota"):
     }
 
     # Enviar los datos al microservicio usando requests si se presiona el botón
-    if submit_button:
-        response = requests.post(url, json=payload)
+    response = requests.post(url, json=payload)
 
-        # Mostrar el resultado de la solicitud
-        if response.status_code == 200:
-            st.success("Datos de la mascota enviados correctamente")
-            st.json(response.json())
-        else:
-            st.error("Error al enviar los datos")
+    # Mostrar el resultado de la solicitud
+    if response.status_code == 200:
+        st.success("Datos de la mascota enviados correctamente")
+        st.json(response.json())
+    else:
+        st.error("Error al enviar los datos")
 
