@@ -77,36 +77,35 @@ class FormDataMascota(BaseModel):
     class Config:
         orm_mode = True
 
-file_path = "\\wsl.localhost\Ubuntu\home\andres\repositorios\clinica-veterinaria\sqlalchemy\duenos"
+file_path = "./duenos.txt"
 
 @app.post("/envio/")
 async def submit_form(data: FormDataDuenos):
+    dueños_registrados = [{}]
     # Validar que el dueño no esté ya registrado
-    if any(d['Nombre'] == data.Nombre for d in dueños_registrados):
-        raise HTTPException(status_code=400, detail="El dueño ya está registrado.")
-
     # Cargar dueños existentes desde el archivo
     try:
         with open(file_path, "r") as file:
-            dueños_registrados = json.load(file)
+            dueños_registrados = json.load(file_path)
+            if any(d.get('Nombre') == data.Nombre for d in dueños_registrados):
+                raise HTTPException(status_code=400, detail="El dueño ya está registrado.")
     except FileNotFoundError:
-        dueños_registrados = []  # Si no existe, inicializa una lista vacía
+        dueños_registrados = []  # Si no existe, inicializa una lista vacío
+    except HTTPException as e:
+        raise HTTPException ('Problema') from e
+    finally:
+        print(data)
+        dueños_registrados.append(data.dict())  # Convertir el modelo a diccionario y añadirlo a la lista
+        with open(file_path, "w") as file:
+            json.dump(dueños_registrados, file, indent=4)  # Guarda con formato JSON legible
 
-    # Añadir el nuevo dueño al listado
-    dueños_registrados.append(data.dict())  # Convertir el modelo a diccionario y añadirlo a la lista
+            return {"message": "Formulario recibido y guardado", "data": data}
+    
 
-    # Guardar la lista actualizada en el archivo
-    with open(file_path, "w") as file:
-        json.dump(dueños_registrados, file, indent=4)  # Guarda con formato JSON legible
-
-    return {"message": "Formulario recibido y guardado", "data": data}
-
-# Lista temporal de dueños registrados
-# Ejemplo: [{'Nombre': 'Carlos', 'Telefono': '123456789', 'email': 'carlos@example.com'}]
-dueños_registrados = [{"Nombre": "Carlos", "Telefono": "123456789", "email": "carlos@example.com"}]
 
 @app.post("/registro_mascota/")
 async def registro_mascota(nombre: str, edad: int, tipo: int, dueño: str):
+    dueños_registrados = [{}]
     # Validar que el dueño esté registrado
     if not any(d['Nombre'] == dueño for d in dueños_registrados):
         return JSONResponse(status_code=400, content={"error": "El dueño no está registrado."})
