@@ -30,4 +30,5 @@ with st.form("envio"):
         st.success("Datos enviados correctamente")
         st.json(response.json())
     else:
-        st.error("Error al enviar los datos")
+        st.error(f"Error al enviar los datos: {response.status_code}")
+        st.write(response.text)  # Mostrar el mensaje de error detallado
