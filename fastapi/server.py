@@ -55,6 +55,13 @@ def get_new_id():
     current_id += 1
     return current_id
 
+current_id_duenos = 0
+
+def get_new_id_duenos():
+    global current_id_duenos
+    current_id_duenos += 1
+    return current_id_duenos
+
 class FormDataDuenos(BaseModel):
     Nombre: str
     Telefono: str
@@ -71,41 +78,60 @@ class FormDataMascota(BaseModel):
         orm_mode = True
 
 file_path = "./duenos.txt"
+file_path_mascotas = "./mascotas.txt"
 
 @app.post("/envio/")
 async def submit_form(data: FormDataDuenos):
     dueños_registrados = []
     try:
+        # Leer los dueños registrados
         with open(file_path, "r") as file:
             dueños_registrados = json.load(file)
             if any(d.get('Nombre') == data.Nombre for d in dueños_registrados):
                 raise HTTPException(status_code=400, detail="El dueño ya está registrado.")
     except FileNotFoundError:
         dueños_registrados = []
-    except HTTPException as e:
-        raise HTTPException(status_code=500, detail="Error en el registro.") from e
-    finally:
-        dueños_registrados.append(data.dict())
-        with open(file_path, "w") as file:
-            json.dump(dueños_registrados, file, indent=4)
-        return {"message": "Formulario recibido y guardado", "data": data}
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="Error al leer el archivo de dueños.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ocurrió un error inesperado: {str(e)}")
+
+    # Generar un nuevo ID para el dueño
+    nuevo_id = get_new_id_duenos()
+    data_dict = data.dict()
+    data_dict['ID'] = nuevo_id  # Asignar el nuevo ID al dueño
+
+    dueños_registrados.append(data_dict)
+    with open(file_path, "w") as file:
+        json.dump(dueños_registrados, file, indent=4)
+    
+    return {"message": "Formulario recibido y guardado", "data": data_dict}
 
 @app.post("/registro_mascota/")
 async def registro_mascota(mascota: FormDataMascota):
+    # Ruta del archivo donde se guardarán los datos de las mascotas
+    file_path_mascotas = "mascotas.txt"  # Asegúrate de que esta ruta sea correcta para tu contenedor
+    file_path_duenos = "duenos.txt"  # Suponiendo que los dueños están en "dueños.txt"
+
+    # Leer los dueños registrados
     try:
-        # Leer los dueños registrados
-        with open(file_path, "r") as file:
+        with open(file_path_duenos, "r") as file:
             dueños_registrados = json.load(file)
     except FileNotFoundError:
         raise HTTPException(status_code=400, detail="No se encontraron dueños registrados. Por favor, registra primero un dueño.")
-    
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="Error al leer el archivo de dueños.")
+
     # Verificar si el dueño está registrado
     if not any(d['Nombre'] == mascota.nombre_dueño for d in dueños_registrados):
         raise HTTPException(status_code=400, detail="El dueño no está registrado.")
-    
+
+    # Generar un nuevo ID para la mascota
+    nuevo_id = get_new_id()  # Asegúrate de que esta función esté definida y genere un ID único
+
     # Crear un diccionario con los datos de la mascota
     mascota_data = {
-        "ID": get_new_id(),
+        "ID": nuevo_id,
         "Nombre": mascota.nombre_mascota,
         "Edad": mascota.edad,
         "Tipo": mascota.tipo,
@@ -114,6 +140,23 @@ async def registro_mascota(mascota: FormDataMascota):
         "Dueño": mascota.nombre_dueño
     }
 
+    # Guardar los datos de la mascota en el archivo
+    try:
+        # Leer las mascotas existentes
+        try:
+            with open(file_path_mascotas, "r") as file:
+                mascotas_existentes = json.load(file)
+        except FileNotFoundError:
+            mascotas_existentes = []  # Si no existe el archivo, comenzamos con una lista vacía
+
+        # Agregar la nueva mascota a la lista
+        mascotas_existentes.append(mascota_data)
+
+        # Escribir la lista actualizada de mascotas en el archivo
+        with open(file_path_mascotas, "w") as file:
+            json.dump(mascotas_existentes, file, indent=4)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ocurrió un error al guardar los datos de la mascota: {str(e)}")
+
     return {"message": "Mascota registrada con éxito", "mascota": mascota_data}
-
-
