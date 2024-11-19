@@ -1,50 +1,14 @@
 import streamlit as st
-
 from streamlit_calendar import calendar
-
 import requests
 
+st.title("Calendario📆 de polllo")
 
-st.title("Demo de streamlit-calendar con popup para inserción de datos 📆")
+# URLs del backend
+backend_registro_cita = "http://fastapi:8000/registro_cita/"
+backend_get_citas = "http://fastapi:8000/get_citas/"
 
-
-def send(data):
-    #r = requests.post(
-    #    backend, json=data
-    #)
-    #return r.status_code
-    return '200'
-@st.dialog("Mete info!")
-def popup ():
-    st.write(f'Fecha de la cita')
-    with st.form("my_form"):
-        tratamiento = st.text_input("Ingrese el tratamiento:")
-        #edificio = ,,,
-        #
-        submitted = st.form_submit_button("Submit form")
-
-    if submitted:
-        envio = send(...)
-        if envio == '200':
-            st.success("Enviado con éxito, puede cerrar!")
-        else:
-            st.error("No se envio, status_code: {}".format(envio))
-
-
-mode = st.selectbox(
-    "Calendar Mode:",
-    (
-        "daygrid",
-        "timegrid",
-        "timeline",
-        "resource-daygrid",
-        "resource-timegrid",
-        "resource-timeline",
-        "list",
-        "multimonth",
-    ),
-)
-
+# Define events antes de cualquier referencia
 events = [
     {
         "title": "Consulta Perrito",
@@ -109,8 +73,86 @@ events = [
         "end": "2023-07-02T12:30:00",
         "resourceId": "c",
     },
-
 ]
+
+# Inicializar events en st.session_state si no está presente o está mal inicializado
+if "events" not in st.session_state or not isinstance(st.session_state["events"], list):
+    st.session_state["events"] = events  # Inicializa con la lista predeterminada
+
+# Función para cargar eventos desde el backend
+def cargar_eventos():
+    response = requests.get(backend_get_citas)
+    if response.status_code == 200:
+        citas = response.json().get("citas", [])
+        st.session_state["events"] = []  # Reinicia la lista para evitar duplicados
+        for cita in citas:
+            evento = {
+                "title": f"{cita['Nombre_mascota']} - {cita['Tratamiento']}",
+                "color": "#FFA07A",
+                "start": cita["Fecha_inicio"],
+                "end": cita["Fecha_fin"],
+                "resourceId": "a",
+            }
+            st.session_state["events"].append(evento)
+
+# Cargar eventos al inicio
+cargar_eventos()
+
+# Función para registrar una cita en el backend
+def send(data):
+    response = requests.post(backend_registro_cita, json=data)
+    return response.status_code
+
+# Función popup para registrar nueva cita
+@st.dialog("Registrar nueva cita")
+def popup():
+    st.write("Fecha de la cita:")
+    with st.form("formulario_cita"):
+        nombre_dueño = st.text_input("Nombre del dueño:")
+        nombre_mascota = st.text_input("Nombre de la mascota:")
+        tipo_animal = st.selectbox("Tipo de animal:", ["Perro", "Gato", "Loro", "Otro"])
+        tratamiento = st.text_input("Tratamiento:")
+        urgencia = st.slider("Nivel de urgencia (1 - Baja, 5 - Alta)", 1, 5, 1)
+
+        submitted = st.form_submit_button("Registrar cita")
+
+    if submitted:
+        if not st.session_state.get("time_inicial") or not st.session_state.get("time_final"):
+            st.error("Seleccione un rango de tiempo válido en el calendario.")
+            return
+
+        nuevo_evento = {
+            "Nombre_dueño": nombre_dueño,
+            "Nombre_mascota": nombre_mascota,
+            "Tratamiento": tratamiento,
+            "Nivel_urgencia": urgencia,
+            "Fecha_inicio": st.session_state.get("time_inicial"),
+            "Fecha_fin": st.session_state.get("time_final"),
+        }
+
+        response = requests.post(backend_registro_cita, json=nuevo_evento)
+
+        if response.status_code == 200:
+            st.success("Cita registrada con éxito")
+            cargar_eventos()  # Recargar eventos desde el backend
+        else:
+            st.error("Error al registrar la cita")
+
+# Configuración del calendario
+mode = st.selectbox(
+    "Calendar Mode:",
+    (
+        "daygrid",
+        "timegrid",
+        "timeline",
+        "resource-daygrid",
+        "resource-timegrid",
+        "resource-timeline",
+        "list",
+        "multimonth",
+    ),
+)
+
 calendar_resources = [
     {"id": "a", "building": "Clinica 1", "title": "Consulta A"},
     {"id": "b", "building": "Clinica 1", "title": "Consulta A"},
@@ -120,13 +162,6 @@ calendar_resources = [
     {"id": "f", "building": "Clinica 1", "title": "Consulta B"},
 ]
 
-
-backend = "http://fastapi:8000/citas"  # Esta URL meterla en un parámetro de configuración
-
-
-fecha = ''
-
-
 calendar_options = {
     "editable": "true",
     "navLinks": "true",
@@ -134,14 +169,14 @@ calendar_options = {
     "selectable": "true",
 }
 calendar_options = {
-            **calendar_options,
-            "initialDate": "2023-07-01",
-            "initialView": "resourceTimeGridDay",
-            "resourceGroupField": "building",
-        }
+    **calendar_options,
+    "initialDate": "2023-07-01",
+    "initialView": "resourceTimeGridDay",
+    "resourceGroupField": "building",
+}
 
 state = calendar(
-    events=st.session_state.get("events", events),
+    events=st.session_state["events"],
     options=calendar_options,
     custom_css="""
     .fc-event-past {
@@ -160,10 +195,8 @@ state = calendar(
     key='timegrid',
 )
 
-name = ''
 if state.get("eventsSet") is not None:
     st.session_state["events"] = state["eventsSet"]
-    #st.session_state["fecha"] = state["date"]
 
 if state.get('select') is not None:
     st.session_state["time_inicial"] = state["select"]["start"]
@@ -172,14 +205,7 @@ if state.get('select') is not None:
 
 if state.get('eventChange') is not None:
     data = state.get('eventChange').get('event')
-    ## aquí haríamos un requests.post()
-
-    st.success('cita camboada con éxito')
+    st.success('Cita cambiada con éxito')
 
 if st.session_state.get("fecha") is not None:
-    st.write('fecha')
-    #st.write(st.session_state["fecha"])
-   # with st.popover("Open popover"):
-   #     st.markdown("Hello World 👋")
-   #     name = st.text_input("What's your name?")
-
+    st.write('Fecha seleccionada')

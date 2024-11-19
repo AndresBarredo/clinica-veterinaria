@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 import pandas as pd
 from typing import List, Optional
+import datetime
 
 from pydantic import BaseModel as PydanticBaseModel
 
@@ -77,8 +78,18 @@ class FormDataMascota(BaseModel):
     class Config:
         orm_mode = True
 
+class FormDataCitas(BaseModel):
+    Nombre_dueño: str
+    Nombre_mascota: str
+    Tratamiento: str
+    Nivel_urgencia: int
+    Fecha_inicio: str
+    Fecha_fin: str
+        
+
 file_path = "./duenos.txt"
 file_path_mascotas = "./mascotas.txt"
+citas_path = "./citas.txt"
 
 @app.post("/envio/")
 async def submit_form(data: FormDataDuenos):
@@ -160,3 +171,34 @@ async def registro_mascota(mascota: FormDataMascota):
         raise HTTPException(status_code=500, detail=f"Ocurrió un error al guardar los datos de la mascota: {str(e)}")
 
     return {"message": "Mascota registrada con éxito", "mascota": mascota_data}
+
+# Endpoints de Citas
+@app.post("/registro_cita/")
+async def registro_cita(data: FormDataCitas):
+    try:
+        datetime.strptime(data.Fecha_inicio, "%Y-%m-%dT%H:%M:%S")
+        datetime.strptime(data.Fecha_fin, "%Y-%m-%dT%H:%M:%S")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Formato de fecha inválido")
+
+    citas_registradas = []
+    try:
+        with open(citas_path, "r") as file:
+            citas_registradas = json.load(file)
+    except FileNotFoundError:
+        citas_registradas = []
+
+    citas_registradas.append(data.dict())
+    with open(citas_path, "w") as file:
+        json.dump(citas_registradas, file, indent=4)
+
+    return {"message": "Cita registrada con éxito", "data": data}
+
+@app.get("/get_citas/")
+async def get_citas():
+    try:
+        with open(citas_path, "r") as file:
+            citas = json.load(file)
+        return {"citas": citas}
+    except FileNotFoundError:
+        return {"citas": []}
