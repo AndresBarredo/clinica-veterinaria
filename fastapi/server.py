@@ -202,3 +202,52 @@ async def get_citas():
         return {"citas": citas}
     except FileNotFoundError:
         return {"citas": []}
+    
+from pydantic import BaseModel
+
+class BajaDueño(BaseModel):
+    nombre_dueño: str
+
+@app.post("/baja/")
+async def dar_de_baja(data: BajaDueño):
+    nombre_dueño = data.nombre_dueño  # Extraer el nombre del dueño del objeto recibido
+
+    # Ruta de los archivos
+    file_path_duenos = "duenos.txt"
+    file_path_mascotas = "mascotas.txt"
+    
+    # Leer los dueños registrados
+    try:
+        with open(file_path_duenos, "r") as file:
+            dueños_registrados = json.load(file)
+    except FileNotFoundError:
+        raise HTTPException(status_code=400, detail="No se encontraron dueños registrados.")
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="Error al leer el archivo de dueños.")
+    
+    # Filtrar los dueños que no son el que queremos dar de baja
+    dueños_actualizados = [d for d in dueños_registrados if d['Nombre'] != nombre_dueño]
+
+    # Verificar si se realizó alguna eliminación
+    if len(dueños_actualizados) == len(dueños_registrados):
+        raise HTTPException(status_code=404, detail="Dueño no encontrado.")
+    
+    # Guardar los dueños actualizados
+    with open(file_path_duenos, "w") as file:
+        json.dump(dueños_actualizados, file, indent=4)
+
+    # Leer las mascotas registradas
+    try:
+        with open(file_path_mascotas, "r") as file:
+            mascotas_registradas = json.load(file)
+    except FileNotFoundError:
+        mascotas_registradas = []
+
+    # Filtrar las mascotas que no pertenecen al dueño que queremos dar de baja
+    mascotas_actualizadas = [m for m in mascotas_registradas if m['Dueño'] != nombre_dueño]
+
+    # Guardar las mascotas actualizadas
+    with open(file_path_mascotas, "w") as file:
+        json.dump(mascotas_actualizadas, file, indent=4)
+
+    return {"message": f"Dueño y sus mascotas dados de baja correctamente."}
