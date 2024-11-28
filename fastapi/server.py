@@ -251,3 +251,34 @@ async def dar_de_baja(data: BajaDueño):
         json.dump(mascotas_actualizadas, file, indent=4)
 
     return {"message": f"Dueño y sus mascotas dados de baja correctamente."}
+
+class Factura(BaseModel):
+    nombre_dueño: str
+    nombre_mascota: str
+    tratamiento: str
+    precio: float
+    fecha: str
+    
+
+@app.post("/generar_factura/")
+async def generar_factura(data: Factura):
+    # Aquí podrías guardar la factura en un archivo o base de datos si es necesario
+    return {"message": "Factura generada con éxito", "factura": data}
+
+@app.get("/get_dueños/")
+async def get_duenos():
+    try:
+        with open(file_path, "r") as file:
+            dueños = json.load(file)
+        return {"dueños": dueños}
+    except FileNotFoundError:
+        return {"dueños": []}
+
+@app.get("/get_mascotas/")
+async def get_mascotas():
+    try:
+        with open(file_path_mascotas, "r") as file:
+            mascotas = json.load(file)
+        return {"mascotas": mascotas}
+    except FileNotFoundError:
+        return {"mascotas": []}
