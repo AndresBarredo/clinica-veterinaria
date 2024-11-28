@@ -2,116 +2,81 @@ import streamlit as st
 from streamlit_calendar import calendar
 import requests
 
-st.title("Calendario📆 de polllo")
+st.title("Calendario y Citas 📆")
 
 # URLs del backend
 backend_registro_cita = "http://fastapi:8000/registro_cita/"
 backend_get_citas = "http://fastapi:8000/get_citas/"
 
-# Define events antes de cualquier referencia
-events = [
-    {
-        "title": "Consulta Perrito",
-        "color": "#FF6C6C",
-        "start": "2023-07-03",
-        "end": "2023-07-05",
-        "resourceId": "a",
-    },
-    {
-        "title": "Consulta Gatito ",
-        "color": "#FFBD45",
-        "start": "2023-07-01",
-        "end": "2023-07-10",
-        "resourceId": "b",
-    },
-    {
-        "title": "Consulta Perrito",
-        "color": "#FF4B4B",
-        "start": "2023-07-20",
-        "end": "2023-07-20",
-        "resourceId": "c",
-    },
-    {
-        "title": "Consulta Gatito",
-        "color": "#FF6C6C",
-        "start": "2023-07-23",
-        "end": "2023-07-25",
-        "resourceId": "d",
-    },
-    {
-        "title": "Consulta Loro",
-        "color": "#FFBD45",
-        "start": "2023-07-29",
-        "end": "2023-07-30",
-        "resourceId": "e",
-    },
-    {
-        "title": "Consulta Guacamayo Ibérico",
-        "color": "#FF4B4B",
-        "start": "2023-07-28",
-        "end": "2023-07-20",
-        "resourceId": "f",
-    },
-    {
-        "title": "Estudio",
-        "color": "#FF4B4B",
-        "start": "2023-07-01T08:30:00",
-        "end": "2023-07-01T10:30:00",
-        "resourceId": "a",
-    },
-    {
-        "title": "Recados",
-        "color": "#3D9DF3",
-        "start": "2023-07-01T07:30:00",
-        "end": "2023-07-01T10:30:00",
-        "resourceId": "b",
-    },
-    {
-        "title": "Revisión Perrito",
-        "color": "#3DD56D",
-        "start": "2023-07-02T10:40:00",
-        "end": "2023-07-02T12:30:00",
-        "resourceId": "c",
-    },
-]
 
-# Inicializar events en st.session_state si no está presente o está mal inicializado
-if "events" not in st.session_state or not isinstance(st.session_state["events"], list):
-    st.session_state["events"] = events  # Inicializa con la lista predeterminada
+
+# Inicializar events en st.session_state si no está presente
+if "events" not in st.session_state:
+    st.session_state["events"] = []  # Inicializa con una lista vacía
+
+def obtener_color(nivel_urgencia):
+    colores = {
+        1: "#3DD56D",  # Verde
+        2: "#A3D356",  # Verde / Amarillo
+        3: "#F0C048",  # Amarillo
+        4: "#F59E42",  # Naranja
+        5: "#FF6C6C",  # Rojo
+    }
+    return colores.get(nivel_urgencia, "#FFA07A")  # Color por defecto
 
 # Función para cargar eventos desde el backend
 def cargar_eventos():
-    response = requests.get(backend_get_citas)
-    if response.status_code == 200:
-        citas = response.json().get("citas", [])
-        st.session_state["events"] = []  # Reinicia la lista para evitar duplicados
-        for cita in citas:
-            evento = {
-                "title": f"{cita['Nombre_mascota']} - {cita['Tratamiento']}",
-                "color": "#FFA07A",
-                "start": cita["Fecha_inicio"],
-                "end": cita["Fecha_fin"],
-                "resourceId": "a",
-            }
-            st.session_state["events"].append(evento)
+    try:
+        response = requests.get(backend_get_citas)
+        if response.status_code == 200:
+            citas = response.json().get("citas", [])
+            st.session_state["events"] = []  # Reinicia la lista para evitar duplicados
+            for cita in citas:
+                evento = {
+                    "title": f"{cita['Nombre_mascota']} - {cita['Tratamiento']}",
+                    "color": obtener_color(cita["Nivel_urgencia"]),
+                    "start": cita["Fecha_inicio"],
+                    "end": cita["Fecha_fin"],
+                    "resourceId": "a",
+                }
+                st.session_state["events"].append(evento)
+        else:
+            st.error("Error al cargar las citas desde el backend.")
+    except Exception as e:
+        st.error(f"Error de conexión al backend: {e}")
 
 # Cargar eventos al inicio
 cargar_eventos()
 
-# Función para registrar una cita en el backend
-def send(data):
-    response = requests.post(backend_registro_cita, json=data)
-    return response.status_code
+# Función para cargar dueños y mascotas
+# Función para cargar dueños y mascotas desde el backend
+def cargar_dueños_y_mascotas():
+    url_duenos = "http://fastapi:8000/get_dueños/"
+    url_mascotas = "http://fastapi:8000/get_mascotas/"
+
+    try:
+        dueños = requests.get(url_duenos).json().get("dueños", [])
+        mascotas = requests.get(url_mascotas).json().get("mascotas", [])
+    except Exception as e:
+        st.error(f"Error al conectar con el backend: {e}")
+        dueños, mascotas = [], []
+
+    return dueños, mascotas
+
+# Cargar dueños y mascotas
+dueños, mascotas = cargar_dueños_y_mascotas()
+
+# Función para obtener el color según el nivel de emergencia
 
 # Función popup para registrar nueva cita
 @st.dialog("Registrar nueva cita")
 def popup():
     st.write("Fecha de la cita:")
     with st.form("formulario_cita"):
-        nombre_dueño = st.text_input("Nombre del dueño:")
-        nombre_mascota = st.text_input("Nombre de la mascota:")
-        tipo_animal = st.selectbox("Tipo de animal:", ["Perro", "Gato", "Loro", "Otro"])
-        tratamiento = st.text_input("Tratamiento:")
+        nombre_dueño = st.selectbox("Nombre del Dueño", [d["Nombre"] for d in dueños])
+        mascotas_dueño = [m["Nombre"] for m in mascotas if m["Dueño"] == nombre_dueño]
+        nombre_mascota = st.selectbox("Nombre de la Mascota", mascotas_dueño)
+        tratamiento = st.text_input("Tratamiento")
         urgencia = st.slider("Nivel de urgencia (1 - Baja, 5 - Alta)", 1, 5, 1)
 
         submitted = st.form_submit_button("Registrar cita")
@@ -121,58 +86,46 @@ def popup():
             st.error("Seleccione un rango de tiempo válido en el calendario.")
             return
 
+        # Crear nuevo evento con el color según nivel de emergencia
         nuevo_evento = {
             "Nombre_dueño": nombre_dueño,
             "Nombre_mascota": nombre_mascota,
             "Tratamiento": tratamiento,
             "Nivel_urgencia": urgencia,
-            "Fecha_inicio": st.session_state.get("time_inicial"),
-            "Fecha_fin": st.session_state.get("time_final"),
+            "Fecha_inicio": st.session_state["time_inicial"],
+            "Fecha_fin": st.session_state["time_final"],
         }
 
-        response = requests.post(backend_registro_cita, json=nuevo_evento)
+        response = requests.post("http://fastapi:8000/registro_cita/", json=nuevo_evento)
 
         if response.status_code == 200:
             st.success("Cita registrada con éxito")
-            cargar_eventos()  # Recargar eventos desde el backend
+            # Añadir el evento al calendario con el color correspondiente
+            evento_color = {
+                "title": f"{nombre_mascota} - {tratamiento}",
+                "color": obtener_color(urgencia),
+                "start": st.session_state["time_inicial"],
+                "end": st.session_state["time_final"],
+                "resourceId": "a",
+            }
+            st.session_state["events"].append(evento_color)
         else:
             st.error("Error al registrar la cita")
 
 # Configuración del calendario
-mode = st.selectbox(
-    "Calendar Mode:",
-    (
-        "daygrid",
-        "timegrid",
-        "timeline",
-        "resource-daygrid",
-        "resource-timegrid",
-        "resource-timeline",
-        "list",
-        "multimonth",
-    ),
-)
-
-calendar_resources = [
-    {"id": "a", "building": "Clinica 1", "title": "Consulta A"},
-    {"id": "b", "building": "Clinica 1", "title": "Consulta A"},
-    {"id": "c", "building": "Clinica 1", "title": "Consulta B"},
-    {"id": "d", "building": "Clinica 1", "title": "Consulta B"},
-    {"id": "e", "building": "Clinica 1", "title": "Consulta A"},
-    {"id": "f", "building": "Clinica 1", "title": "Consulta B"},
-]
-
 calendar_options = {
     "editable": "true",
     "navLinks": "true",
-    "resources": calendar_resources,
     "selectable": "true",
-}
-calendar_options = {
-    **calendar_options,
-    "initialDate": "2023-07-01",
-    "initialView": "resourceTimeGridDay",
-    "resourceGroupField": "building",
+    "initialView": "timeGridWeek",  # Cambiar a vista semanal con horarios
+    "headerToolbar": {
+        "left": "prev,next today",
+        "center": "title",
+        "right": "timeGridDay,timeGridWeek"
+    },
+    "slotMinTime": "08:00:00",  # Hora mínima
+    "slotMaxTime": "20:00:00",  # Hora máxima
+    "allDaySlot": False,  # Ocultar "all-day" para enfocarse en las horas
 }
 
 state = calendar(
@@ -192,20 +145,10 @@ state = calendar(
         font-size: 2rem;
     }
     """,
-    key='timegrid',
+    key="calendar",
 )
 
-if state.get("eventsSet") is not None:
-    st.session_state["events"] = state["eventsSet"]
-
-if state.get('select') is not None:
+if state.get("select") is not None:
     st.session_state["time_inicial"] = state["select"]["start"]
     st.session_state["time_final"] = state["select"]["end"]
     popup()
-
-if state.get('eventChange') is not None:
-    data = state.get('eventChange').get('event')
-    st.success('Cita cambiada con éxito')
-
-if st.session_state.get("fecha") is not None:
-    st.write('Fecha seleccionada')

@@ -175,12 +175,28 @@ async def registro_mascota(mascota: FormDataMascota):
 # Endpoints de Citas
 @app.post("/registro_cita/")
 async def registro_cita(data: FormDataCitas):
+    # Validar que el dueño y la mascota existen
     try:
-        datetime.strptime(data.Fecha_inicio, "%Y-%m-%dT%H:%M:%S")
-        datetime.strptime(data.Fecha_fin, "%Y-%m-%dT%H:%M:%S")
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Formato de fecha inválido")
+        with open(file_path, "r") as file:
+            dueños = json.load(file)
+        with open(file_path_mascotas, "r") as file:
+            mascotas = json.load(file)
 
+        dueño_valido = any(d["Nombre"] == data.Nombre_dueño for d in dueños)
+        mascota_valida = any(
+            m["Nombre"] == data.Nombre_mascota and m["Dueño"] == data.Nombre_dueño
+            for m in mascotas
+        )
+
+        if not dueño_valido:
+            raise HTTPException(status_code=400, detail="El dueño no existe.")
+        if not mascota_valida:
+            raise HTTPException(status_code=400, detail="La mascota no está asociada al dueño.")
+
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail="Archivos de dueños o mascotas no encontrados.")
+
+    # Guardar la cita
     citas_registradas = []
     try:
         with open(citas_path, "r") as file:
@@ -192,7 +208,7 @@ async def registro_cita(data: FormDataCitas):
     with open(citas_path, "w") as file:
         json.dump(citas_registradas, file, indent=4)
 
-    return {"message": "Cita registrada con éxito", "data": data}
+    return {"message": "Cita registrada con éxito"}
 
 @app.get("/get_citas/")
 async def get_citas():
