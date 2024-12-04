@@ -46,3 +46,5 @@ if st.button("Actualizar Estadísticas"):
 else:
     # Mostrar mensaje inicial o por defecto
     st.info("Presiona el botón 'Actualizar Estadísticas' para cargar los datos.")
+
+
