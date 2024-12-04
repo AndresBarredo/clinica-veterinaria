@@ -133,28 +133,6 @@ async def obtener_estadisticas():
         "recibos": total_recibos,
     }
 
-@app.post("/actualizar_estadisticas/")
-async def actualizar_estadisticas():
-    dueños = load_data(file_path)
-    mascotas = load_data(file_path_mascotas)
-    citas = load_data(citas_path)
-    facturas = load_data(facturas_path)
-
-    total_dueños = len(dueños)
-    total_mascotas = len(mascotas)
-    total_citas = len(citas)
-    total_ingresos = sum(factura.get("precio", 0) for factura in facturas)
-    total_recibos = len(facturas)
-
-    # Retorna las estadísticas actualizadas
-    return {
-        "dueños": total_dueños,
-        "mascotas": total_mascotas,
-        "citas": total_citas,
-        "ingresos": total_ingresos,
-        "recibos": total_recibos,
-    }
-    
 @app.post("/envio/")
 async def submit_form(data: FormDataDuenos):
     dueños_registrados = []
