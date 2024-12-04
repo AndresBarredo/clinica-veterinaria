@@ -1,18 +1,16 @@
 import shutil
 import json
-import io
 from fastapi.responses import JSONResponse
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 import pandas as pd
 from typing import List, Optional
-import datetime
-
 from pydantic import BaseModel as PydanticBaseModel
 
 class BaseModel(PydanticBaseModel):
     class Config:
         arbitrary_types_allowed = True
 
+# Modelos de datos
 class Contrato(BaseModel):
     fecha: str
     centro_seccion: str
@@ -32,22 +30,63 @@ class Contrato(BaseModel):
     I_G: str
 
 class ListadoContratos(BaseModel):
-    contratos = List[Contrato]
+    contratos: List[Contrato]
 
+class FormDataDuenos(BaseModel):
+    Nombre: str
+    Telefono: str
+    email: str
+
+class FormDataMascota(BaseModel):
+    nombre_dueño: str
+    nombre_mascota: str
+    tipo: str
+    raza: Optional[str] = None
+    edad: int
+    tratamientos: Optional[str] = None
+
+class FormDataCitas(BaseModel):
+    Nombre_dueño: str
+    Nombre_mascota: str
+    Tratamiento: str
+    Nivel_urgencia: int
+    Fecha_inicio: str
+    Fecha_fin: str
+
+class Factura(BaseModel):
+    nombre_dueño: str
+    nombre_mascota: str
+    tratamiento: str
+    precio: float
+    fecha: str
+
+class BajaDueño(BaseModel):
+    nombre_dueño: str
+
+# Inicialización de la aplicación
 app = FastAPI(
     title="Servidor de datos",
-    description="Servimos datos de contratos, pero podríamos hacer muchas otras cosas, la la la.",
+    description="Servimos datos de contratos, pero podríamos hacer muchas otras cosas.",
     version="0.1.0",
 )
 
-@app.get("/retrieve_data/")
-def retrieve_data():
-    todosmisdatos = pd.read_csv('./contratos_inscritos_simplificado_2023.csv', sep=';')
-    todosmisdatos = todosmisdatos.fillna(0)
-    todosmisdatosdict = todosmisdatos.to_dict(orient='records')
-    listado = ListadoContratos()
-    listado.contratos = todosmisdatosdict
-    return listado
+# Definición de rutas para archivos
+file_path = "./duenos.txt"
+file_path_mascotas = "./mascotas.txt"
+citas_path = "./citas.txt"
+facturas_path = "./facturas.txt"
+
+# Funciones auxiliares
+def load_data(file_path):
+    try:
+        with open(file_path, "r") as file:
+            return json.load(file)
+    except FileNotFoundError:
+        return []
+
+def save_data(file_path, data):
+    with open(file_path, "w") as file:
+        json.dump(data, file, indent=4)
 
 current_id = 0  # Variable global para el ID de mascotas
 
@@ -63,34 +102,59 @@ def get_new_id_duenos():
     current_id_duenos += 1
     return current_id_duenos
 
-class FormDataDuenos(BaseModel):
-    Nombre: str
-    Telefono: str
-    email: str
+# Endpoints
+@app.get("/retrieve_data/")
+def retrieve_data():
+    todosmisdatos = pd.read_csv('./contratos_inscritos_simplificado_2023.csv', sep=';')
+    todosmisdatos = todosmisdatos.fillna(0)
+    todosmisdatosdict = todosmisdatos.to_dict(orient='records')
+    listado = ListadoContratos()
+    listado.contratos = todosmisdatosdict
+    return listado
 
-class FormDataMascota(BaseModel):
-    nombre_dueño: str
-    nombre_mascota: str
-    tipo: str
-    raza: Optional[str] = None
-    edad: int
-    tratamientos: Optional[str] = None
-    class Config:
-        orm_mode = True
+@app.get("/estadisticas/")
+async def obtener_estadisticas():
+    dueños = load_data(file_path)
+    mascotas = load_data(file_path_mascotas)
+    citas = load_data(citas_path)
+    facturas = load_data(facturas_path)
 
-class FormDataCitas(BaseModel):
-    Nombre_dueño: str
-    Nombre_mascota: str
-    Tratamiento: str
-    Nivel_urgencia: int
-    Fecha_inicio: str
-    Fecha_fin: str
-        
+    total_dueños = len(dueños)
+    total_mascotas = len(mascotas)
+    total_citas = len(citas)
+    total_ingresos = sum(factura.get("precio", 0) for factura in facturas)
+    total_recibos = len(facturas)
 
-file_path = "./duenos.txt"
-file_path_mascotas = "./mascotas.txt"
-citas_path = "./citas.txt"
+    return {
+        "dueños": total_dueños,
+        "mascotas": total_mascotas,
+        "citas": total_citas,
+        "ingresos": total_ingresos,
+        "recibos": total_recibos,
+    }
 
+@app.post("/actualizar_estadisticas/")
+async def actualizar_estadisticas():
+    dueños = load_data(file_path)
+    mascotas = load_data(file_path_mascotas)
+    citas = load_data(citas_path)
+    facturas = load_data(facturas_path)
+
+    total_dueños = len(dueños)
+    total_mascotas = len(mascotas)
+    total_citas = len(citas)
+    total_ingresos = sum(factura.get("precio", 0) for factura in facturas)
+    total_recibos = len(facturas)
+
+    # Retorna las estadísticas actualizadas
+    return {
+        "dueños": total_dueños,
+        "mascotas": total_mascotas,
+        "citas": total_citas,
+        "ingresos": total_ingresos,
+        "recibos": total_recibos,
+    }
+    
 @app.post("/envio/")
 async def submit_form(data: FormDataDuenos):
     dueños_registrados = []
@@ -172,7 +236,6 @@ async def registro_mascota(mascota: FormDataMascota):
 
     return {"message": "Mascota registrada con éxito", "mascota": mascota_data}
 
-# Endpoints de Citas
 @app.post("/registro_cita/")
 async def registro_cita(data: FormDataCitas):
     # Validar que el dueño y la mascota existen
@@ -210,6 +273,24 @@ async def registro_cita(data: FormDataCitas):
 
     return {"message": "Cita registrada con éxito"}
 
+@app.get("/get_dueños/")
+async def get_duenos():
+    try:
+        with open(file_path, "r") as file:
+            dueños = json.load(file)
+        return {"dueños": dueños}
+    except FileNotFoundError:
+        return {"dueños": []}
+
+@app.get("/get_mascotas/")
+async def get_mascotas():
+    try:
+        with open(file_path_mascotas, "r") as file:
+            mascotas = json.load(file)
+        return {"mascotas": mascotas}
+    except FileNotFoundError:
+        return {"mascotas": []}
+
 @app.get("/get_citas/")
 async def get_citas():
     try:
@@ -218,11 +299,6 @@ async def get_citas():
         return {"citas": citas}
     except FileNotFoundError:
         return {"citas": []}
-    
-from pydantic import BaseModel
-
-class BajaDueño(BaseModel):
-    nombre_dueño: str
 
 @app.post("/baja/")
 async def dar_de_baja(data: BajaDueño):
@@ -268,33 +344,9 @@ async def dar_de_baja(data: BajaDueño):
 
     return {"message": f"Dueño y sus mascotas dados de baja correctamente."}
 
-class Factura(BaseModel):
-    nombre_dueño: str
-    nombre_mascota: str
-    tratamiento: str
-    precio: float
-    fecha: str
-    
-
 @app.post("/generar_factura/")
 async def generar_factura(data: Factura):
-    # Aquí podrías guardar la factura en un archivo o base de datos si es necesario
-    return {"message": "Factura generada con éxito", "factura": data}
-
-@app.get("/get_dueños/")
-async def get_duenos():
-    try:
-        with open(file_path, "r") as file:
-            dueños = json.load(file)
-        return {"dueños": dueños}
-    except FileNotFoundError:
-        return {"dueños": []}
-
-@app.get("/get_mascotas/")
-async def get_mascotas():
-    try:
-        with open(file_path_mascotas, "r") as file:
-            mascotas = json.load(file)
-        return {"mascotas": mascotas}
-    except FileNotFoundError:
-        return {"mascotas": []}
+    facturas = load_data(facturas_path)
+    facturas.append(data.dict())
+    save_data(facturas_path, facturas)
+    return {"message": "Factura generada con éxito"}
