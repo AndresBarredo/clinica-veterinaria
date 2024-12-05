@@ -45,7 +45,9 @@ if st.button("Actualizar Estadísticas"):
             st.subheader('🧾 Recibos Generados')
             st.markdown(f"<h1 style='text-align: center;'>{estadisticas['recibos']}</h1>", unsafe_allow_html=True)
 
-        # Crear las gráficas a partir de las estadísticas
+
+    # Crear las gráficas a partir de las estadísticas
+
     st.header("📊 Análisis Gráfico")
 
     # Gráfica: Dueños vs Ingresos
