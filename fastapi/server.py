@@ -119,11 +119,19 @@ async def obtener_estadisticas():
     citas = load_data(citas_path)
     facturas = load_data(facturas_path)
 
+    # Calcular estadísticas generales
     total_dueños = len(dueños)
     total_mascotas = len(mascotas)
     total_citas = len(citas)
     total_ingresos = sum(factura.get("precio", 0) for factura in facturas)
     total_recibos = len(facturas)
+
+    # Calcular ingresos por dueño
+    ingresos_por_dueño = {}
+    for factura in facturas:
+        nombre_dueño = factura.get("nombre_dueño")
+        if nombre_dueño:
+            ingresos_por_dueño[nombre_dueño] = ingresos_por_dueño.get(nombre_dueño, 0) + factura.get("precio", 0)
 
     return {
         "dueños": total_dueños,
@@ -131,7 +139,11 @@ async def obtener_estadisticas():
         "citas": total_citas,
         "ingresos": total_ingresos,
         "recibos": total_recibos,
+        "nombres_dueños": list(ingresos_por_dueño.keys()),  # Nombres de dueños
+        "ingresos_por_dueño": list(ingresos_por_dueño.values()),  # Ingresos correspondientes
     }
+
+
 
 @app.post("/envio/")
 async def submit_form(data: FormDataDuenos):
