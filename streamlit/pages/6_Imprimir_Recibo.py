@@ -5,15 +5,24 @@ from datetime import datetime
 API_URL = "http://fastapi:8000"
 
 # Obtener dueños
-dueños = requests.get(f"{API_URL}/get_dueños/").json()  # Usa la ruta correcta
-nombres_dueños = [d['Nombre'] for d in dueños.get("dueños", [])]
+response_dueños = requests.get(f"{API_URL}/get_dueños/")
+if response_dueños.status_code == 200:
+    dueños = response_dueños.json().get("dueños", [])
+    nombres_dueños = [d['Nombre'] for d in dueños]
+    print(f"Nombres de dueños: {nombres_dueños}")  # Debug log
+else:
+    st.error("Error al obtener dueños")
+    nombres_dueños = []
 
 # Obtener mascotas
-mascotas = requests.get(f"{API_URL}/get_mascotas/").json()  # Usa la ruta correcta
-nombres_mascotas = [m['Nombre'] for m in mascotas.get("mascotas", [])]
-
-# Obtener citas
-citas = requests.get(f"{API_URL}/get_citas/").json()  # Usa la ruta correcta
+response_mascotas = requests.get(f"{API_URL}/get_mascotas/")
+if response_mascotas.status_code == 200:
+    mascotas = response_mascotas.json().get("mascotas", [])
+    nombres_mascotas = [m['nombre_mascota'] for m in mascotas]
+    print(f"Nombres de mascotas: {nombres_mascotas}")  # Debug log
+else:
+    st.error("Error al obtener mascotas")
+    nombres_mascotas = []
 
 # Interfaz de usuario
 st.title("Generar Factura")
@@ -33,12 +42,15 @@ if st.button("Generar Factura"):
         "fecha": fecha
     }
     response = requests.post(f"{API_URL}/generar_factura/", json=factura_data)
-    st.success(response.json())
     
-    st.write("Factura:")
-    st.write(f"Dueño: {nombre_dueño}")
-    st.write(f"Mascota: {nombre_mascota}")
-    st.write(f"Tratamiento: {tratamiento}")
-    st.write(f"Precio: ${precio:.2f}")
-    st.write(f"Fecha: {fecha}")
+    if response.status_code == 200:
+        st.success("Factura generada con éxito")
+        st.write("Factura:")
+        st.write(f"Dueño: {nombre_dueño}")
+        st.write(f"Mascota: {nombre_mascota}")
+        st.write(f"Tratamiento: {tratamiento}")
+        st.write(f"Precio: ${precio:.2f}")
+        st.write(f"Fecha: {fecha}")
+    else:
+        st.error("Error al generar factura")
     

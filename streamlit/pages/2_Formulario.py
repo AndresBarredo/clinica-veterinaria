@@ -1,9 +1,10 @@
 import streamlit as st
 import requests
 from datetime import datetime
+import json
 
 # URL del microservicio FastAPI
-url = "http://fastapi:8000/envio/"
+url = "http://fastapi:8000/envio"
 
 st.title("Registrar Dueños 🐶")
 

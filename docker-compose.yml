@@ -1,9 +1,14 @@
-version: '3'
-
 services:
-  
+  mongodb:
+    image: mongo:latest
+    ports:
+      - 27017:27017
+    networks:
+      - deploy_network
   fastapi:
-    build: fastapi/
+    build:
+      context: .
+      dockerfile: fastapi/Dockerfile
     ports:
       - 8000:8000
     networks:
@@ -11,6 +16,8 @@ services:
     container_name: fastapi
     volumes:
       - mis_datos:/var/lib/docker/volumes/aa-streamlit-fastapi_mis_datos/_data
+    depends_on:
+      - mongodb
   streamlit:
     build: streamlit/
     depends_on:
@@ -25,6 +32,5 @@ services:
 networks:
   deploy_network:
     driver: bridge
-    
 volumes:
-   mis_datos:
+  mis_datos:

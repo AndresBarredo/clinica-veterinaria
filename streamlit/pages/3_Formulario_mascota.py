@@ -1,5 +1,6 @@
 import streamlit as st
 import requests
+import json
 
 # URL del microservicio FastAPI
 url = "http://fastapi:8000/registro_mascota/"

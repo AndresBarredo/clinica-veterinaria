@@ -1,14 +1,15 @@
-FROM tiangolo/uvicorn-gunicorn
-
-RUN mkdir /fastapi
-
-COPY requirements.txt /fastapi
+FROM tiangolo/uvicorn-gunicorn:latest
 
 WORKDIR /fastapi
 
+
+COPY ./fastapi/requirements.txt .
+
 RUN pip install -r requirements.txt
 
-COPY . /fastapi
+COPY ./fastapi/ .
+
+COPY ./mongo/basededatos.py .
 
 EXPOSE 8000
 
