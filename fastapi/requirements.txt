@@ -2,3 +2,6 @@ pydantic==1.10.4
 fastapi
 pandas
 
+#pymongo==4.5.0
+pymongo==4.5.0
+

@@ -4,7 +4,8 @@ from fastapi.responses import JSONResponse
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 import pandas as pd
 from typing import List, Optional
-from pydantic import BaseModel as PydanticBaseModel
+from pydantic import BaseModel as PydanticBaseModel, validator
+from basededatos import BaseDeDatos
 
 class BaseModel(PydanticBaseModel):
     class Config:
@@ -36,6 +37,26 @@ class FormDataDuenos(BaseModel):
     Nombre: str
     Telefono: str
     email: str
+
+    @validator('Nombre')
+    def nombre_no_vacio(cls, v):
+        if not v.strip():
+            raise ValueError('El nombre no puede estar vacío')
+        return v.strip()
+
+    @validator('Telefono')
+    def telefono_valido(cls, v):
+        if not v.strip():
+            raise ValueError('El teléfono no puede estar vacío')
+        return v.strip()
+
+    @validator('email')
+    def email_valido(cls, v):
+        if not v.strip():
+            raise ValueError('El email no puede estar vacío')
+        if '@' not in v:
+            raise ValueError('Email inválido')
+        return v.strip().lower()
 
 class FormDataMascota(BaseModel):
     nombre_dueño: str
@@ -69,6 +90,7 @@ app = FastAPI(
     description="Servimos datos de contratos, pero podríamos hacer muchas otras cosas.",
     version="0.1.0",
 )
+db = BaseDeDatos()
 
 # Definición de rutas para archivos
 file_path = "./duenos.txt"
@@ -114,229 +136,274 @@ def retrieve_data():
 
 @app.get("/estadisticas/")
 async def obtener_estadisticas():
-    dueños = load_data(file_path)
-    mascotas = load_data(file_path_mascotas)
-    citas = load_data(citas_path)
-    facturas = load_data(facturas_path)
-
-    # Calcular estadísticas generales
-    total_dueños = len(dueños)
-    total_mascotas = len(mascotas)
-    total_citas = len(citas)
-    total_ingresos = sum(factura.get("precio", 0) for factura in facturas)
-    total_recibos = len(facturas)
-
-    # Calcular ingresos por dueño
-    ingresos_por_dueño = {}
-    for factura in facturas:
-        nombre_dueño = factura.get("nombre_dueño")
-        if nombre_dueño:
-            ingresos_por_dueño[nombre_dueño] = ingresos_por_dueño.get(nombre_dueño, 0) + factura.get("precio", 0)
-
-    return {
-        "dueños": total_dueños,
-        "mascotas": total_mascotas,
-        "citas": total_citas,
-        "ingresos": total_ingresos,
-        "recibos": total_recibos,
-        "nombres_dueños": list(ingresos_por_dueño.keys()),  # Nombres de dueños
-        "ingresos_por_dueño": list(ingresos_por_dueño.values()),  # Ingresos correspondientes
-    }
-
-
+    return await db.obtener_estadisticas()
 
 @app.post("/envio/")
 async def submit_form(data: FormDataDuenos):
-    dueños_registrados = []
     try:
-        # Leer los dueños registrados
-        with open(file_path, "r") as file:
-            dueños_registrados = json.load(file)
-            if any(d.get('Nombre') == data.Nombre for d in dueños_registrados):
-                raise HTTPException(status_code=400, detail="El dueño ya está registrado.")
-    except FileNotFoundError:
-        dueños_registrados = []
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=500, detail="Error al leer el archivo de dueños.")
+        print(f"Datos recibidos: {data.dict()}")  # Log para ver qué datos llegan
+        
+        # Verificar si el dueño ya existe
+        dueno_existente = await db.buscar_dueno(data.Nombre)
+        if dueno_existente:
+            print(f"Dueño ya existe: {dueno_existente}")  # Log para depuración
+            raise HTTPException(status_code=400, detail="El dueño ya está registrado.")
+
+        # Crear nuevo dueño
+        nuevo_dueno = data.dict()
+        print(f"Intentando crear dueño: {nuevo_dueno}")  # Log para depuración
+        resultado = await db.crear_dueno(nuevo_dueno)
+        print(f"Resultado de crear dueño: {resultado}")  # Log del resultado
+        return {"message": "Formulario recibido y guardado", "data": resultado}
+    except HTTPException as he:
+        print(f"Error de validación: {he.detail}")  # Log de errores de validación
+        raise he
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Ocurrió un error inesperado: {str(e)}")
-
-    # Generar un nuevo ID para el dueño
-    nuevo_id = get_new_id_duenos()
-    data_dict = data.dict()
-    data_dict['ID'] = nuevo_id  # Asignar el nuevo ID al dueño
-
-    dueños_registrados.append(data_dict)
-    with open(file_path, "w") as file:
-        json.dump(dueños_registrados, file, indent=4)
-    
-    return {"message": "Formulario recibido y guardado", "data": data_dict}
+        print(f"Error inesperado: {str(e)}")  # Log de errores inesperados
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/registro_mascota/")
-async def registro_mascota(mascota: FormDataMascota):
-    # Ruta del archivo donde se guardarán los datos de las mascotas
-    file_path_mascotas = "mascotas.txt"  # Asegúrate de que esta ruta sea correcta para tu contenedor
-    file_path_duenos = "duenos.txt"  # Suponiendo que los dueños están en "dueños.txt"
-
-    # Leer los dueños registrados
+async def crear_mascota(mascota: dict):
     try:
-        with open(file_path_duenos, "r") as file:
-            dueños_registrados = json.load(file)
-    except FileNotFoundError:
-        raise HTTPException(status_code=400, detail="No se encontraron dueños registrados. Por favor, registra primero un dueño.")
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=500, detail="Error al leer el archivo de dueños.")
-
-    # Verificar si el dueño está registrado
-    if not any(d['Nombre'] == mascota.nombre_dueño for d in dueños_registrados):
-        raise HTTPException(status_code=400, detail="El dueño no está registrado.")
-
-    # Generar un nuevo ID para la mascota
-    nuevo_id = get_new_id()  # Asegúrate de que esta función esté definida y genere un ID único
-
-    # Crear un diccionario con los datos de la mascota
-    mascota_data = {
-        "ID": nuevo_id,
-        "Nombre": mascota.nombre_mascota,
-        "Edad": mascota.edad,
-        "Tipo": mascota.tipo,
-        "Raza": mascota.raza,
-        "Tratamientos": mascota.tratamientos,
-        "Dueño": mascota.nombre_dueño
-    }
-
-    # Guardar los datos de la mascota en el archivo
-    try:
-        # Leer las mascotas existentes
-        try:
-            with open(file_path_mascotas, "r") as file:
-                mascotas_existentes = json.load(file)
-        except FileNotFoundError:
-            mascotas_existentes = []  # Si no existe el archivo, comenzamos con una lista vacía
-
-        # Agregar la nueva mascota a la lista
-        mascotas_existentes.append(mascota_data)
-
-        # Escribir la lista actualizada de mascotas en el archivo
-        with open(file_path_mascotas, "w") as file:
-            json.dump(mascotas_existentes, file, indent=4)
-
+        # Validar que los campos requeridos estén presentes y no estén vacíos
+        campos_requeridos = ["nombre_mascota", "nombre_dueño", "tipo", "edad"]
+        for campo in campos_requeridos:
+            if campo not in mascota or not str(mascota[campo]).strip():
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"El campo {campo} es requerido y no puede estar vacío"
+                )
+        
+        # Limpiar datos antes de enviarlos a la base de datos
+        mascota_limpia = {
+            "nombre_mascota": mascota["nombre_mascota"].strip(),
+            "nombre_dueño": mascota["nombre_dueño"].strip(),
+            "tipo": mascota["tipo"].strip(),
+            "edad": mascota["edad"],
+            "raza": mascota.get("raza", "").strip(),
+            "tratamientos": mascota.get("tratamientos", "").strip()
+        }
+        
+        resultado = await db.crear_mascota(mascota_limpia)
+        return resultado
+    except HTTPException as he:
+        raise he
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Ocurrió un error al guardar los datos de la mascota: {str(e)}")
-
-    return {"message": "Mascota registrada con éxito", "mascota": mascota_data}
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/registro_cita/")
 async def registro_cita(data: FormDataCitas):
-    # Validar que el dueño y la mascota existen
     try:
-        with open(file_path, "r") as file:
-            dueños = json.load(file)
-        with open(file_path_mascotas, "r") as file:
-            mascotas = json.load(file)
-
-        dueño_valido = any(d["Nombre"] == data.Nombre_dueño for d in dueños)
-        mascota_valida = any(
-            m["Nombre"] == data.Nombre_mascota and m["Dueño"] == data.Nombre_dueño
-            for m in mascotas
-        )
-
-        if not dueño_valido:
-            raise HTTPException(status_code=400, detail="El dueño no existe.")
+        print(f"Datos de cita recibidos: {data.dict()}")  # Debug log
+        
+        # Verificar que el dueño existe
+        dueno = await db.buscar_dueno(data.Nombre_dueño)
+        if not dueno:
+            raise HTTPException(status_code=400, detail="El dueño no existe")
+        
+        # Verificar que la mascota existe y pertenece al dueño
+        mascotas = await db.obtener_mascotas_por_dueno(data.Nombre_dueño)
+        mascota_valida = any(m["Nombre"] == data.Nombre_mascota for m in mascotas)
         if not mascota_valida:
-            raise HTTPException(status_code=400, detail="La mascota no está asociada al dueño.")
+            raise HTTPException(
+                status_code=400, 
+                detail="La mascota no está registrada para este dueño"
+            )
+        
+        # Guardar la cita en la base de datos con los nombres de campos correctos
+        nueva_cita = {
+            "Nombre_dueño": data.Nombre_dueño,
+            "Nombre_mascota": data.Nombre_mascota,
+            "Tratamiento": data.Tratamiento,
+            "Nivel_urgencia": data.Nivel_urgencia,
+            "Fecha_inicio": data.Fecha_inicio,
+            "Fecha_fin": data.Fecha_fin
+        }
+        
+        resultado = await db.crear_cita(nueva_cita)
+        print(f"Cita registrada: {resultado}")  # Debug log
+        
+        return {"message": "Cita registrada con éxito", "data": resultado}
+        
+    except HTTPException as he:
+        print(f"Error de validación: {he.detail}")  # Debug log
+        raise he
+    except Exception as e:
+        print(f"Error inesperado: {str(e)}")  # Debug log
+        raise HTTPException(status_code=500, detail=str(e))
 
-    except FileNotFoundError:
-        raise HTTPException(status_code=500, detail="Archivos de dueños o mascotas no encontrados.")
-
-    # Guardar la cita
-    citas_registradas = []
-    try:
-        with open(citas_path, "r") as file:
-            citas_registradas = json.load(file)
-    except FileNotFoundError:
-        citas_registradas = []
-
-    citas_registradas.append(data.dict())
-    with open(citas_path, "w") as file:
-        json.dump(citas_registradas, file, indent=4)
-
-    return {"message": "Cita registrada con éxito"}
-
-@app.get("/get_dueños/")
+@app.get("/duenos")
 async def get_duenos():
     try:
-        with open(file_path, "r") as file:
-            dueños = json.load(file)
-        return {"dueños": dueños}
-    except FileNotFoundError:
-        return {"dueños": []}
+        duenos = await db.obtener_duenos()
+        print(f"Dueños obtenidos: {duenos}")  # Debug log
+        return {"duenos": duenos}
+    except Exception as e:
+        print(f"Error al obtener dueños: {e}")  # Debug log
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/get_mascotas/")
+@app.get("/mascotas")
 async def get_mascotas():
     try:
-        with open(file_path_mascotas, "r") as file:
-            mascotas = json.load(file)
+        mascotas = await db.obtener_mascotas()
+        print(f"Mascotas obtenidas: {mascotas}")  # Debug log
         return {"mascotas": mascotas}
-    except FileNotFoundError:
-        return {"mascotas": []}
+    except Exception as e:
+        print(f"Error al obtener mascotas: {e}")  # Debug log
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/mascotas_por_dueno/{nombre_dueno}")
+async def get_mascotas_por_dueno(nombre_dueno: str):
+    try:
+        mascotas = await db.obtener_mascotas_por_dueno(nombre_dueno)
+        print(f"Mascotas obtenidas para {nombre_dueno}: {mascotas}")  # Debug log
+        return {"mascotas": mascotas}
+    except Exception as e:
+        print(f"Error al obtener mascotas: {e}")  # Debug log
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/get_citas/")
 async def get_citas():
     try:
-        with open(citas_path, "r") as file:
-            citas = json.load(file)
+        citas = await db.obtener_citas()
+        print(f"Citas recuperadas: {citas}")  # Debug log
         return {"citas": citas}
-    except FileNotFoundError:
-        return {"citas": []}
+    except Exception as e:
+        print(f"Error al obtener citas: {str(e)}")  # Debug log
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/baja/")
-async def dar_de_baja(data: BajaDueño):
-    nombre_dueño = data.nombre_dueño  # Extraer el nombre del dueño del objeto recibido
-
-    # Ruta de los archivos
-    file_path_duenos = "duenos.txt"
-    file_path_mascotas = "mascotas.txt"
-    
-    # Leer los dueños registrados
+async def dar_de_baja(dueno_data: dict):
     try:
-        with open(file_path_duenos, "r") as file:
-            dueños_registrados = json.load(file)
-    except FileNotFoundError:
-        raise HTTPException(status_code=400, detail="No se encontraron dueños registrados.")
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=500, detail="Error al leer el archivo de dueños.")
-    
-    # Filtrar los dueños que no son el que queremos dar de baja
-    dueños_actualizados = [d for d in dueños_registrados if d['Nombre'] != nombre_dueño]
-
-    # Verificar si se realizó alguna eliminación
-    if len(dueños_actualizados) == len(dueños_registrados):
-        raise HTTPException(status_code=404, detail="Dueño no encontrado.")
-    
-    # Guardar los dueños actualizados
-    with open(file_path_duenos, "w") as file:
-        json.dump(dueños_actualizados, file, indent=4)
-
-    # Leer las mascotas registradas
-    try:
-        with open(file_path_mascotas, "r") as file:
-            mascotas_registradas = json.load(file)
-    except FileNotFoundError:
-        mascotas_registradas = []
-
-    # Filtrar las mascotas que no pertenecen al dueño que queremos dar de baja
-    mascotas_actualizadas = [m for m in mascotas_registradas if m['Dueño'] != nombre_dueño]
-
-    # Guardar las mascotas actualizadas
-    with open(file_path_mascotas, "w") as file:
-        json.dump(mascotas_actualizadas, file, indent=4)
-
-    return {"message": f"Dueño y sus mascotas dados de baja correctamente."}
+        nombre_dueño = dueno_data.get("nombre_dueño")
+        print(f"Intentando dar de baja al dueño: {nombre_dueño}")  # Debug log
+        
+        # Eliminar al dueño
+        dueño_eliminado = await db.eliminar_dueno(nombre_dueño)
+        print(f"Dueño eliminado: {dueño_eliminado}")  # Debug log
+        
+        # Eliminar las mascotas asociadas al dueño
+        mascotas_eliminadas = await db.eliminar_mascotas_por_dueno(nombre_dueño)
+        print(f"Mascotas eliminadas: {mascotas_eliminadas}")  # Debug log
+        
+        if dueño_eliminado and mascotas_eliminadas:
+            return {"message": "Dueño y sus mascotas dados de baja correctamente."}
+        else:
+            raise HTTPException(status_code=404, detail="Dueño no encontrado o error al eliminar")
+    except Exception as e:
+        print(f"Error al dar de baja: {str(e)}")  # Debug log
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/generar_factura/")
-async def generar_factura(data: Factura):
-    facturas = load_data(facturas_path)
-    facturas.append(data.dict())
-    save_data(facturas_path, facturas)
-    return {"message": "Factura generada con éxito"}
+async def generar_factura(factura_data: dict):
+    try:
+        resultado = await db.crear_factura(factura_data)
+        return {"message": "Factura generada con éxito", "factura": resultado}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/debug/database")
+async def debug_database():
+    try:
+        duenos = await db.obtener_duenos()
+        mascotas = await db.obtener_mascotas()
+        return {
+            "duenos": duenos,
+            "mascotas": mascotas,
+            "total_duenos": len(duenos),
+            "total_mascotas": len(mascotas)
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.post("/duenos/")
+async def crear_dueno(dueno: dict):
+    try:
+        # Normalizar el formato del nombre
+        if "Nombre" in dueno:
+            dueno["Nombre"] = dueno["Nombre"].strip()
+        print(f"Creando dueño: {dueno}")  # Log para depuración
+        return await db.crear_dueno(dueno)
+    except Exception as e:
+        print(f"Error al crear dueño: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/debug/all")
+async def debug_all():
+    try:
+        duenos = await db.obtener_duenos()
+        mascotas = await db.obtener_mascotas()
+        return {
+            "duenos_raw": list(db.db.mascotas.distinct('nombre_dueño')),
+            "duenos_processed": duenos,
+            "mascotas_raw": list(db.db.mascotas.find({}, {'_id': 0})),
+            "mascotas_processed": mascotas
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.delete("/limpiar_base_datos")
+async def limpiar_base_datos():
+    try:
+        print("Recibida solicitud para limpiar la base de datos")  # Debug log
+        resultado = await db.limpiar_base_datos()
+        
+        if resultado:
+            print("Base de datos limpiada exitosamente")  # Debug log
+            return JSONResponse(
+                status_code=200,
+                content={"message": "Base de datos limpiada exitosamente"}
+            )
+        else:
+            print("Error al limpiar la base de datos")  # Debug log
+            raise HTTPException(status_code=500, detail="Error al limpiar la base de datos")
+            
+    except Exception as e:
+        print(f"Error durante la limpieza: {str(e)}")  # Debug log
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al limpiar la base de datos: {str(e)}"
+        )
+
+@app.get("/get_dueños/")
+async def get_dueños():
+    try:
+        dueños = await db.obtener_duenos()
+        print(f"Dueños recuperados: {dueños}")  # Debug log
+        return {"dueños": dueños}
+    except Exception as e:
+        print(f"Error al obtener dueños: {str(e)}")  # Debug log
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/get_mascotas/")
+async def get_mascotas():
+    try:
+        mascotas = await db.obtener_mascotas()
+        print(f"Mascotas recuperadas: {mascotas}")  # Debug log
+        return {"mascotas": mascotas}
+    except Exception as e:
+        print(f"Error al obtener mascotas: {str(e)}")  # Debug log
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/limpiar_citas")
+async def limpiar_citas():
+    try:
+        print("Recibida solicitud para limpiar las citas")  # Debug log
+        resultado = await db.limpiar_citas()
+        
+        if resultado:
+            print("Citas limpiadas exitosamente")  # Debug log
+            return JSONResponse(
+                status_code=200,
+                content={"message": "Citas limpiadas exitosamente"}
+            )
+        else:
+            print("Error al limpiar las citas")  # Debug log
+            raise HTTPException(status_code=500, detail="Error al limpiar las citas")
+            
+    except Exception as e:
+        print(f"Error durante la limpieza de citas: {str(e)}")  # Debug log
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al limpiar las citas: {str(e)}"
+        )
